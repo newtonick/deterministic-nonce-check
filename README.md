@@ -60,12 +60,14 @@ been tampered with.
 
 1. **Generate.** The site creates a throwaway BIP39 seed and a random unsigned
    mainnet PSBT spending from it.
-2. **Send.** The PSBT is displayed as an animated `ur:crypto-psbt` QR code for
-   the device to scan.
-3. **Load.** The seed is displayed as a SeedSigner Standard SeedQR. The device
-   loads it and signs. The mnemonic words stay hidden behind a toggle — they are
-   only a fallback for a device that cannot scan the QR.
-4. **Compare.** The signed PSBT is scanned back through the camera. The site
+2. **Load the seed.** Shown as a SeedSigner Standard SeedQR. The mnemonic words
+   stay hidden behind a toggle — they are only a fallback for a device that
+   cannot scan the QR. The seed comes first because these devices expect a seed
+   to be loaded before a transaction is scanned.
+3. **Send the transaction.** The PSBT is displayed as an animated
+   `ur:crypto-psbt` QR code for the device to scan.
+4. **Approve.** Work through the device's review screens and sign.
+5. **Compare.** The signed PSBT is scanned back through the camera. The site
    recomputes the expected signatures locally and compares them. If the camera
    fails to start — permission denied, held by another app, unplugged — use
    **Restart camera** rather than reloading; a reload would discard the

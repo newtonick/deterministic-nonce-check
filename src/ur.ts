@@ -91,6 +91,26 @@ export function createPsbtUrEncoder(
   };
 }
 
+/**
+ * An animated `ur:crypto-output` for a wallet descriptor.
+ *
+ * A 2-of-3 sortedmulti descriptor carries three extended keys and produces a QR
+ * dense enough that some device cameras cannot resolve it. Splitting it into
+ * the same fragment size as the PSBT keeps every frame at a density those
+ * cameras already cope with. Single-sig usually still fits one frame.
+ */
+export function createDescriptorUrEncoder(
+  cbor: Uint8Array,
+  fragmentLength = DEFAULT_FRAGMENT_LENGTH,
+): PsbtUrEncoder {
+  const ur = new UR(Buffer.from(cbor), 'crypto-output');
+  const encoder = new UREncoder(ur, fragmentLength);
+  return {
+    totalParts: encoder.fragmentsLength,
+    next: () => encoder.nextPart().toUpperCase(),
+  };
+}
+
 export interface UrScanProgress {
   complete: boolean;
   /** 0..1, how much of the payload has been recovered. */

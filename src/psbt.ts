@@ -85,8 +85,14 @@ export function estimatedBlockHeight(now = Date.now()): number {
 }
 
 /** Bounds on the total value a generated transaction spends, in satoshis. */
-export const MIN_TOTAL_SPEND = 50_000;
-export const MAX_TOTAL_SPEND = 20_000_000;
+export const MIN_TOTAL_SPEND = 1_000_000;
+export const MAX_TOTAL_SPEND = 100_000_000;
+
+/** Highest address index used, so derivation paths stay short and readable. */
+export const MAX_ADDRESS_INDEX = 100;
+
+/** How far apart clustered addresses may sit. */
+const ADDRESS_CLUSTER_WIDTH = 12;
 
 /** Smallest value any single input may carry, to keep amounts plausible. */
 const MIN_INPUT_VALUE = 2_000;
@@ -102,10 +108,12 @@ const MIN_INPUT_VALUE = 2_000;
  * uniformly, so repeated runs are not fingerprintable by amount.
  */
 function randomInputValues(rng: Rng, inputCount: number): number[] {
+  // Three bands, each drawn about a third of the time. A uniform draw over the
+  // whole range would put nearly every transaction near the top of it.
   const band = rng.pick([
-    [MIN_TOTAL_SPEND, 250_000],
-    [250_000, 2_000_000],
-    [2_000_000, MAX_TOTAL_SPEND],
+    [MIN_TOTAL_SPEND, 5_000_000],
+    [5_000_000, 25_000_000],
+    [25_000_000, MAX_TOTAL_SPEND],
   ]);
   const total = rng.range(band[0], band[1]);
 
@@ -172,8 +180,10 @@ export function generateTest(rng: Rng, options: GenerateOptions = {}): Generated
   const sequence = SEQUENCE_RBF;
 
   // UTXOs cluster around recently used addresses rather than scattering
-  // uniformly across the whole gap limit.
-  const indexBase = rng.range(0, 180);
+  // uniformly across the whole gap limit. Kept within 0-100: a wallet with a
+  // couple of hundred used addresses is plausible but makes the paths tedious
+  // to read off a device screen.
+  const indexBase = rng.range(0, MAX_ADDRESS_INDEX - ADDRESS_CLUSTER_WIDTH);
 
   const psbt = new bitcoin.Psbt({ network: NETWORK });
   psbt.setVersion(version);
@@ -192,7 +202,7 @@ export function generateTest(rng: Rng, options: GenerateOptions = {}): Generated
     let index: number;
     do {
       change = rng.chance(0.75) ? 0 : 1;
-      index = Math.max(0, indexBase + rng.range(0, 20));
+      index = indexBase + rng.range(0, ADDRESS_CLUSTER_WIDTH);
     } while (usedIndices.has(`${change}/${index}`));
     usedIndices.add(`${change}/${index}`);
 
@@ -260,7 +270,7 @@ export function generateTest(rng: Rng, options: GenerateOptions = {}): Generated
     outputs.push({ address: randomExternalAddress(rng), value: primary, isChange: false });
 
     if (hasChange) {
-      const changeIndex = Math.max(0, indexBase + rng.range(0, 20));
+      const changeIndex = indexBase + rng.range(0, ADDRESS_CLUSTER_WIDTH);
       const changeKey = deriveKey(wallet, 1, changeIndex);
       const address = bitcoin.address.fromOutputScript(changeKey.script, NETWORK);
       outputs.push({

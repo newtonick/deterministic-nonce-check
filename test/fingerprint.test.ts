@@ -113,3 +113,26 @@ describe('transaction math', () => {
     }
   });
 });
+
+describe('output descriptor', () => {
+  it('produces a scannable ur:crypto-output for both wallet types', async () => {
+    const { walletDescriptor, cryptoOutputCbor } = await import('../src/descriptor.js');
+    const { createDescriptorUrEncoder } = await import('../src/ur.js');
+    for (const walletType of ['p2wpkh', 'p2wsh-2of3'] as const) {
+      const test = generateTest(seededRng('desc-' + walletType), { walletType });
+      const encoder = createDescriptorUrEncoder(cryptoOutputCbor(test.wallet));
+      const ur = encoder.next();
+      expect(ur).toMatch(/^UR:CRYPTO-OUTPUT\//);
+      // Every frame must stay under the density a modest device camera can
+      // resolve; that is the whole reason the descriptor is animated.
+      expect(ur.length).toBeLessThan(400);
+
+      const text = walletDescriptor(test.wallet);
+      expect(text).toMatch(walletType === 'p2wpkh' ? /^wpkh\(/ : /^wsh\(sortedmulti\(2,/);
+      // Hardened markers must be apostrophes: that is what the device renders
+      // from the QR, and the text and QR have to agree.
+      expect(text).not.toContain('h]');
+      expect(text).toContain("/0/*");
+    }
+  });
+});

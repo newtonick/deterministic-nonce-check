@@ -58,6 +58,18 @@ export function accountPathFor(walletType: WalletType): string {
     : `m/48'/0'/0'/${BIP48_NATIVE_SEGWIT}'`;
 }
 
+/**
+ * Human-readable wallet description, e.g. "Native Segwit Single Sig · BIP-84".
+ *
+ * Derived from the wallet type rather than written out per caller, so it cannot
+ * drift from the derivation path actually used.
+ */
+export function describeWallet(wallet: TestWallet): string {
+  return wallet.walletType === 'p2wpkh'
+    ? 'Native Segwit Single Sig · BIP-84'
+    : `Native Segwit Multisig ${MULTISIG_THRESHOLD} of ${MULTISIG_TOTAL} · BIP-48`;
+}
+
 /** Full derivation path for one key, e.g. "m/84'/0'/0'/1/7". */
 export function keyPath(wallet: TestWallet, change: 0 | 1, index: number): string {
   return `${wallet.accountPath}/${change}/${index}`;
@@ -235,25 +247,4 @@ export function cosignerDerivations(
     pubkey: Buffer.from(c.accountNode.derive(change).derive(index).publicKey),
     path: keyPath(wallet, change, index),
   }));
-}
-
-/**
- * The wsh(sortedmulti(2,...)) descriptor for a multisig wallet.
- *
- * Not shown in the UI today — multisig test transactions never include change,
- * so there is nothing for the device to verify a wallet registration against.
- * It exists because a device that refuses to sign an unregistered multisig will
- * need it, and because it is useful in test output.
- */
-export function multisigDescriptor(wallet: TestWallet): string {
-  if (wallet.walletType !== 'p2wsh-2of3') {
-    throw new Error('descriptor is only defined for multisig wallets');
-  }
-  const origin = wallet.accountPath.replace(/^m/, '').replace(/'/g, 'h');
-  const keys = [
-    { fp: wallet.fingerprint, node: wallet.accountNode.neutered() },
-    ...wallet.cosigners.map((c) => ({ fp: c.fingerprint, node: c.accountNode })),
-  ].map(({ fp, node }) => `[${fp.toString('hex')}${origin}]${node.toBase58()}/<0;1>/*`);
-
-  return `wsh(sortedmulti(${MULTISIG_THRESHOLD},${keys.join(',')}))`;
 }

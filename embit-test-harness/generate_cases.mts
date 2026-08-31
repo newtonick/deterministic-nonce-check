@@ -16,7 +16,8 @@ import { fileURLToPath } from 'node:url';
 import { generateTest, type GenerateOptions } from '../src/psbt.js';
 import { signPsbtLocally } from '../src/sign-psbt.js';
 import { seededRng } from '../src/rng.js';
-import { multisigDescriptor, type WalletType, type WordCount } from '../src/wallet.js';
+import type { WalletType, WordCount } from '../src/wallet.js';
+import { walletDescriptor } from '../src/descriptor.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -64,8 +65,7 @@ for (let i = 0; i < count; i++) {
     wallet_type: test.wallet.walletType,
     account_path: test.wallet.accountPath,
     master_fingerprint: test.wallet.fingerprint.toString('hex'),
-    descriptor:
-      test.wallet.walletType === 'p2wsh-2of3' ? multisigDescriptor(test.wallet) : null,
+    descriptor: walletDescriptor(test.wallet),
     input_count: test.inputs.length,
     output_count: test.outputs.length,
     has_change: test.outputs.some((o) => o.isChange),

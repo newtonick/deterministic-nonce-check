@@ -176,8 +176,9 @@ export function compareSignatures(
   } else if (counts.different > 0) {
     verdict = 'nondeterministic';
     summary =
-      `${counts.different} of ${inputs.length} signatures are valid but differ from ` +
-      'the deterministic result. This device is not using RFC6979 nonces as embit does.';
+      `${counts.different} of ${inputs.length} signature${inputs.length === 1 ? '' : 's'} ` +
+      `${counts.different === 1 ? 'is valid but differs' : 'are valid but differ'} from the ` +
+      'deterministic result. This device is not using RFC6979 nonces as embit does.';
   } else if (counts.invalid > 0 || counts.missing > 0) {
     verdict = 'inconclusive';
     summary =
@@ -186,7 +187,9 @@ export function compareSignatures(
   } else {
     verdict = 'pass';
     summary =
-      `All ${counts.match} signatures are byte-identical to the deterministic result.`;
+      counts.match === 1
+        ? 'The signature is byte-identical to the deterministic result.'
+        : `All ${counts.match} signatures are byte-identical to the deterministic result.`;
   }
 
   return { verdict, inputs, transactionMismatch, summary };
