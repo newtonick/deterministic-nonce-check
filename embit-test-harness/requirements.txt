@@ -1,0 +1,4 @@
+# Pinned to what ships to devices. SeedSigner and Krux both build on embit, so
+# this is the reference implementation the JS signer must agree with.
+embit==0.8.0
+pytest==9.1.1

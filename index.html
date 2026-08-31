@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Deterministic Nonce Check</title>
+    <meta
+      name="description"
+      content="Verify that an airgapped QR Bitcoin signing device uses deterministic ECDSA nonces."
+    />
+  </head>
+  <body>
+    <main id="app">
+      <header class="masthead">
+        <h1>Deterministic Nonce Check</h1>
+        <p class="lede">
+          Confirm that your airgapped signing device (SeedSigner, Krux, Specter
+          DIY) derives its ECDSA nonces deterministically, the way
+          <code>embit</code> does.
+        </p>
+      </header>
+      <div id="cards"></div>
+      <footer class="colophon">
+        <p>
+          Runs entirely in your browser. Nothing is uploaded, and no network
+          request is made after the page loads.
+        </p>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

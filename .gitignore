@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.venv/
+embit-test-harness/cases/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.DS_Store
