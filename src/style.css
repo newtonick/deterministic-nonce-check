@@ -214,3 +214,34 @@ td.sig { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; 
 
 .colophon { color: var(--text-dim); font-size: 0.8rem; text-align: center; padding: 1rem 0 2rem; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+
+/* Numbered device instructions on the approval step. */
+.steps { margin: 0 0 1rem; padding-left: 1.25rem; font-size: 0.9rem; }
+.steps li { margin-bottom: 0.6rem; }
+.steps li::marker { color: var(--text-dim); }
+.steps strong { display: block; font-weight: 600; }
+.steps .detail { color: var(--text-dim); }
+
+/* Transaction details, laid out the way SeedSigner presents them. */
+.tx-details {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  margin: 0 0 1rem;
+}
+.tx-out {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+  padding-bottom: 0.45rem;
+  margin-bottom: 0.45rem;
+  border-bottom: 1px solid var(--border);
+}
+.tx-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+.tx-amount { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tx-math-title { margin: 0 0 0.4rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+.tx-math { display: grid; grid-template-columns: 1fr auto; gap: 0.25rem 1rem; margin: 0; font-size: 0.9rem; }
+.tx-math dt { color: var(--text-dim); }
+.tx-math dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+.tx-math .total { font-weight: 600; color: var(--text); }

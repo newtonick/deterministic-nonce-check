@@ -98,3 +98,18 @@ describe('transaction shape', () => {
     expect(positions.first / total).toBeLessThan(0.75);
   });
 });
+
+describe('transaction math', () => {
+  it('reconciles: inputs - sent - fee = change, for every generated transaction', () => {
+    // The approval card shows this arithmetic so it can be checked against the
+    // device screen. If it did not balance, the tool would be teaching users to
+    // ignore a mismatch on their own hardware.
+    for (let i = 0; i < 120; i++) {
+      const test = generateTest(seededRng('math' + i));
+      const inputTotal = test.inputs.reduce((n, x) => n + x.value, 0);
+      const sent = test.outputs.filter((o) => !o.isChange).reduce((n, o) => n + o.value, 0);
+      const change = test.outputs.filter((o) => o.isChange).reduce((n, o) => n + o.value, 0);
+      expect(inputTotal - sent - test.fee).toBe(change);
+    }
+  });
+});

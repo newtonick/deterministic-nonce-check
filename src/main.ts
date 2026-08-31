@@ -97,6 +97,30 @@ function card(step: number, title: string, hint?: string): Card {
   };
 }
 
+/**
+ * What is being spent and what it costs.
+ *
+ * Deliberately plain: wallet type, fingerprint and derivation paths are
+ * irrelevant to the person holding the phone and only make an ordinary-looking
+ * transaction look technical. Shown twice — once when sending the transaction,
+ * and again while approving it, so the device's own figures can be compared
+ * against these without scrolling back.
+ */
+function transactionSummary(t: GeneratedTest): HTMLElement {
+  const amounts = (values: number[]) =>
+    values.map((v) => v.toLocaleString('en-US')).join(' · ') + ' sats';
+
+  const facts = el('dl', { class: 'facts' });
+  for (const [label, value] of [
+    [t.inputs.length === 1 ? '1 input' : `${t.inputs.length} inputs`, amounts(t.inputs.map((i) => i.value))],
+    [t.outputs.length === 1 ? '1 output' : `${t.outputs.length} outputs`, amounts(t.outputs.map((o) => o.value))],
+    ['Fee', sats(t.fee)],
+  ] as const) {
+    facts.append(el('dt', {}, label), el('dd', {}, value));
+  }
+  return facts;
+}
+
 function sats(value: number): string {
   return `${value.toLocaleString('en-US')} sats`;
 }
@@ -148,21 +172,7 @@ function renderIntro() {
 function renderPsbtCard(t: GeneratedTest) {
   const step = card(2, 'Scan the unsigned transaction');
 
-  // Deliberately plain: what is being spent and what it costs. Wallet type,
-  // fingerprint and derivation paths are irrelevant to the person holding the
-  // phone, and only make an ordinary-looking transaction look technical.
-  const amounts = (values: number[]) =>
-    values.map((v) => v.toLocaleString('en-US')).join(' · ') + ' sats';
-
-  const facts = el('dl', { class: 'facts' });
-  for (const [label, value] of [
-    [t.inputs.length === 1 ? '1 input' : `${t.inputs.length} inputs`, amounts(t.inputs.map((i) => i.value))],
-    [t.outputs.length === 1 ? '1 output' : `${t.outputs.length} outputs`, amounts(t.outputs.map((o) => o.value))],
-    ['Fee', sats(t.fee)],
-  ] as const) {
-    facts.append(el('dt', {}, label), el('dd', {}, value));
-  }
-  step.body.append(facts);
+  step.body.append(transactionSummary(t));
 
   const frame = el('div', { class: 'qr-frame' });
   step.body.append(frame);
@@ -245,20 +255,113 @@ function renderSeedCard(t: GeneratedTest) {
   });
   step.body.append(disclosure);
 
-  const next = el('button', {}, 'Signed — scan the result');
+  const next = el('button', {}, 'Seed loaded — continue');
   next.addEventListener('click', () => {
     next.disabled = true;
-    step.collapse(`Seed shown · ${t.wallet.wordCount} words`);
-    renderScanCard(t);
+    step.collapse('Seed loaded');
+    renderApproveCard(t);
   });
   step.body.append(next);
 }
 
 /* ---------------------------------------------------------------- step 4 */
 
-function renderScanCard(t: GeneratedTest) {
+/**
+ * Transaction details in the shape SeedSigner presents them.
+ *
+ * The device shows each recipient with its amount, then a "transaction math"
+ * screen reconciling input value against what is sent, the fee, and the change.
+ * Mirroring that layout means the figures can be compared line by line against
+ * the device screen instead of mentally re-deriving them.
+ */
+function transactionDetails(t: GeneratedTest): HTMLElement {
+  const n = (v: number) => v.toLocaleString('en-US');
+  const panel = el('div', { class: 'tx-details' });
+
+  const inputTotal = t.inputs.reduce((sum, i) => sum + i.value, 0);
+  const sent = t.outputs.filter((o) => !o.isChange).reduce((sum, o) => sum + o.value, 0);
+  const change = t.outputs.filter((o) => o.isChange).reduce((sum, o) => sum + o.value, 0);
+
+  // Addresses are deliberately omitted: they are random, nothing is broadcast,
+  // and the approval step tells the user to skip checking them.
+  for (const output of t.outputs) {
+    const row = el('div', { class: 'tx-out' });
+    row.append(
+      el('span', { class: 'tx-label' }, output.isChange ? 'Change' : 'Send'),
+      el('span', { class: 'tx-amount' }, `${n(output.value)} sats`),
+    );
+    panel.append(row);
+  }
+
+  // The device reconciles these four numbers; showing the same arithmetic makes
+  // a mismatch obvious rather than something to work out by hand.
+  const math = el('dl', { class: 'tx-math' });
+  const rows: [string, string][] = [
+    ['Input value', n(inputTotal)],
+    ['– Amount sent', n(sent)],
+    ['– Fee', n(t.fee)],
+  ];
+  // Always shown, zero included, so the arithmetic visibly closes and matches
+  // what the device displays rather than leaving the reader to infer it.
+  rows.push(['= Change', n(change)]);
+  for (const [label, value] of rows) {
+    const isTotal = label.startsWith('=');
+    math.append(
+      el('dt', isTotal ? { class: 'total' } : {}, label),
+      el('dd', isTotal ? { class: 'total' } : {}, value),
+    );
+  }
+
+  panel.append(el('p', { class: 'tx-math-title' }, 'Transaction math'), math);
+  return panel;
+}
+
+/**
+ * Approving on the device.
+ *
+ * Signing is not one button on these devices — the transaction has to be
+ * reviewed and confirmed screen by screen, and it is easy to leave the device
+ * sitting on a review screen wondering why no signature appeared. The same
+ * figures shown when the transaction was sent are repeated here so they can be
+ * checked against the device's own display.
+ */
+function renderApproveCard(t: GeneratedTest) {
   const step = card(
     4,
+    'Approve the transaction on your device',
+    'Check these figures against the device screen, then approve. Wording differs by device; SeedSigner is named below.',
+  );
+
+  const list = el('ol', { class: 'steps' });
+  for (const [action, detail] of [
+    ['Open the transaction review', 'On SeedSigner: "Review Transaction".'],
+    ['Step through the transaction math', 'The device totals should match the figures above.'],
+    // The addresses belong to nobody and the transaction is never broadcast, so
+    // there is nothing to verify here. Saying so saves the tedious part of the
+    // review on a device with a small screen and a joystick.
+    ['Skip the recipient checks', 'The addresses are random and this transaction is never broadcast, so they do not matter for this check.'],
+    ['Approve and sign', 'The device then shows the signed transaction as an animated QR code.'],
+  ] as const) {
+    const item = el('li');
+    item.append(el('strong', {}, action), el('span', { class: 'detail' }, detail));
+    list.append(item);
+  }
+  step.body.append(transactionDetails(t), list);
+
+  const next = el('button', {}, 'Signed — scan the result');
+  next.addEventListener('click', () => {
+    next.disabled = true;
+    step.collapse('Transaction approved');
+    renderScanCard(t);
+  });
+  step.body.append(next);
+}
+
+/* ---------------------------------------------------------------- step 5 */
+
+function renderScanCard(t: GeneratedTest) {
+  const step = card(
+    5,
     'Scan the signed transaction',
     'Show the signed PSBT from your device to this camera. Animated QR codes are read frame by frame.',
   );
@@ -342,7 +445,7 @@ function renderScanCard(t: GeneratedTest) {
   void start();
 }
 
-/* ---------------------------------------------------------------- step 5 */
+/* ---------------------------------------------------------------- step 6 */
 
 const OUTCOME_LABEL: Record<InputComparison['outcome'], [string, string]> = {
   match: ['Match', 'match'],
@@ -352,7 +455,7 @@ const OUTCOME_LABEL: Record<InputComparison['outcome'], [string, string]> = {
 };
 
 function renderResultCard(t: GeneratedTest, result: ComparisonResult) {
-  const step = card(5, 'Result');
+  const step = card(6, 'Result');
   const section = step.body;
 
   const banner = el('div', {
