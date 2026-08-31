@@ -66,7 +66,15 @@ been tampered with.
    loads it and signs. The mnemonic words stay hidden behind a toggle — they are
    only a fallback for a device that cannot scan the QR.
 4. **Compare.** The signed PSBT is scanned back through the camera. The site
-   recomputes the expected signatures locally and compares them.
+   recomputes the expected signatures locally and compares them. If the camera
+   fails to start — permission denied, held by another app, unplugged — use
+   **Restart camera** rather than reloading; a reload would discard the
+   transaction and the seed already loaded onto the device.
+
+Camera constraints are requested best-first and relaxed on failure. Safari on
+desktop rejects `facingMode: 'environment'` outright when there is no rear
+camera, where Chrome treats it as a preference, so asking for the ideal setup
+without a fallback fails on an ordinary laptop webcam.
 
 Each step folds down to a one-line summary once it is done, so the step that
 needs attention is the one on screen. A collapsed step can be reopened if a QR

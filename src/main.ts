@@ -263,11 +263,12 @@ function renderScanCard(t: GeneratedTest) {
     'Show the signed PSBT from your device to this camera. Animated QR codes are read frame by frame.',
   );
 
-  const video = el('video', { muted: 'true', playsinline: 'true' });
+  const video = el('video', { playsinline: 'true' });
   const bar = el('progress', { max: '1', value: '0' });
   const status = el('p', { class: 'frame-status' }, 'Starting camera…');
   const error = el('div', { class: 'callout danger', hidden: 'hidden' });
-  step.body.append(video, bar, status, error);
+  const restart = el('button', { class: 'secondary' }, 'Restart camera');
+  step.body.append(video, bar, status, error, restart);
 
   const decoder = createPsbtUrDecoder();
   let finished = false;
@@ -275,38 +276,70 @@ function renderScanCard(t: GeneratedTest) {
   const finish = (signedPsbt: string) => {
     finished = true;
     scanner?.stop();
+    scanner = null;
     video.remove();
     bar.remove();
+    restart.remove();
     status.textContent = 'Signed transaction received.';
     step.collapse('Signed transaction received');
     renderResultCard(t, compareSignatures(t.psbtBase64, t.wallet, signedPsbt));
   };
 
-  void startScanner(
-    video,
-    (text) => {
-      if (finished) return;
-      const progress = decoder.receive(text);
-      if (progress.error) {
+  /**
+   * Start (or restart) scanning.
+   *
+   * Recoverable failures are common — permission denied and then granted, the
+   * camera held by another app, a device unplugged — and none of them should
+   * force a page reload, which would discard the generated transaction and the
+   * seed already loaded onto the signing device.
+   */
+  const start = async () => {
+    if (finished) return;
+
+    // Tear down any previous attempt first, or the old stream keeps the camera.
+    scanner?.stop();
+    scanner = null;
+
+    // Partially accumulated fragments may be from an interrupted read; start
+    // the reassembly clean so a stale part cannot block completion.
+    decoder.reset();
+    bar.value = 0;
+
+    restart.disabled = true;
+    error.hidden = true;
+    status.textContent = 'Starting camera…';
+
+    const handle = await startScanner(
+      video,
+      (text) => {
+        if (finished) return;
+        const progress = decoder.receive(text);
+        if (progress.error) {
+          error.hidden = false;
+          error.textContent = progress.error;
+          return;
+        }
+        error.hidden = true;
+        bar.value = progress.progress;
+        status.textContent = progress.expected
+          ? `${progress.received} of ${progress.expected} frames`
+          : `${progress.received} frames read`;
+        if (progress.complete && progress.psbtBase64) finish(progress.psbtBase64);
+      },
+      (message) => {
         error.hidden = false;
-        error.textContent = progress.error;
-        return;
-      }
-      error.hidden = true;
-      bar.value = progress.progress;
-      status.textContent = progress.expected
-        ? `${progress.received} of ${progress.expected} frames`
-        : `${progress.received} frames read`;
-      if (progress.complete && progress.psbtBase64) finish(progress.psbtBase64);
-    },
-    (message) => {
-      error.hidden = false;
-      error.textContent = message;
-      status.textContent = 'Camera unavailable.';
-    },
-  ).then((handle) => {
+        error.textContent = message;
+        status.textContent = 'Camera unavailable.';
+      },
+    );
+
     scanner = handle;
-  });
+    restart.disabled = false;
+    if (status.textContent === 'Starting camera…') status.textContent = 'Looking for a QR code…';
+  };
+
+  restart.addEventListener('click', () => void start());
+  void start();
 }
 
 /* ---------------------------------------------------------------- step 5 */

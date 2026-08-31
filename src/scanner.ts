@@ -66,25 +66,45 @@ export async function startScanner(
     return { stop: () => {} };
   }
 
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      // Bounding the resolution bounds the per-frame decode cost. Without it a
-      // 4K phone sensor makes every scan several times more expensive.
+  // Safari on desktop rejects facingMode: 'environment' outright when there is
+  // no rear camera, where Chrome treats it as a preference. Ask for the ideal
+  // setup first and fall back, rather than failing on a machine that has a
+  // perfectly usable webcam.
+  const attempts: MediaStreamConstraints[] = [
+    {
       video: {
-        facingMode: 'environment',
+        facingMode: { ideal: 'environment' },
         width: { ideal: 1280 },
         height: { ideal: 720 },
       },
       audio: false,
-    });
-  } catch (err) {
-    const name = (err as DOMException)?.name;
+    },
+    { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+    { video: true, audio: false },
+  ];
+
+  let lastError: unknown = null;
+  for (const constraints of attempts) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      break;
+    } catch (err) {
+      lastError = err;
+      // A denial will not be fixed by relaxing constraints, so stop asking.
+      if ((err as DOMException)?.name === 'NotAllowedError') break;
+    }
+  }
+
+  if (!stream) {
+    const name = (lastError as DOMException)?.name;
     onError(
       name === 'NotAllowedError'
-        ? 'Camera permission was denied. Allow camera access and try again.'
+        ? 'Camera permission was denied. Allow camera access, then use Restart camera.'
         : name === 'NotFoundError'
           ? 'No camera found on this device.'
-          : `Could not start the camera: ${(err as Error).message}`,
+          : name === 'NotReadableError'
+            ? 'The camera is in use by another app. Close it, then use Restart camera.'
+            : `Could not start the camera: ${(lastError as Error)?.message ?? name}`,
     );
     return { stop: () => {} };
   }
