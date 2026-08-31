@@ -289,3 +289,6 @@ button.copy-sig.is-expanded {
 
 /* One-line plain-language summary of what the transaction does. */
 .tx-sentence { margin: 0 0 1rem; font-size: 0.95rem; }
+
+/* Offline download offer, inline in the footer sentence. */
+.colophon a { color: var(--accent); }

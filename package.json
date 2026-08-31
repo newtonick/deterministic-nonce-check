@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:embit": "make test",
-    "gen:cases": "tsx embit-test-harness/generate_cases.mts"
+    "gen:cases": "tsx embit-test-harness/generate_cases.mts",
+    "build:single": "tsc --noEmit && vite build --config vite.single.config.ts",
+    "build:all": "node scripts/build-all.mjs"
   },
   "dependencies": {
     "@bitcoinerlab/secp256k1": "1.2.0",

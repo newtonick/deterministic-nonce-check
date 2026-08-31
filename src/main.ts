@@ -774,4 +774,31 @@ if (import.meta.env.DEV) {
   };
 }
 
+/**
+ * Offer the offline single-file build.
+ *
+ * Omitted from that build itself: the link is relative, so in a file:// page it
+ * would point at nothing. `__SINGLE_FILE__` is a compile-time constant, so the
+ * whole block is eliminated rather than merely skipped.
+ *
+ * The checksum is published beside it because this is a file people are invited
+ * to download and run offline against real signing hardware — being able to
+ * confirm it is the published build matters more than the convenience.
+ */
+function renderOfflineDownload() {
+  if (__SINGLE_FILE__) return;
+  const slot = document.getElementById('offline-download');
+  if (!slot) return;
+
+  const file = 'deterministic-nonce-check.html';
+  const link = el('a', { href: `./${file}`, download: file }, 'Download offline version');
+  const checksum = el('a', { href: `./${file}.sha256` }, 'checksum');
+
+  // Appended into the existing sentence rather than added as its own line, so
+  // the footer stays one continuous piece of text.
+  slot.append(' ', link, ' (', checksum, ').');
+}
+
+
+renderOfflineDownload();
 renderIntro();

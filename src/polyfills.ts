@@ -9,6 +9,9 @@
 import { Buffer as BufferPolyfill } from 'buffer';
 
 declare global {
+  /** True only in the single-file offline build. Set by Vite's `define`. */
+  const __SINGLE_FILE__: boolean;
+
   // eslint-disable-next-line no-var
   var Buffer: typeof BufferPolyfill;
 }

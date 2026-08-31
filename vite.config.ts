@@ -25,6 +25,10 @@ export default defineConfig({
   define: {
     // bitcoinjs-lib and its deps reach for `global` in a few places.
     global: 'globalThis',
+    // Overridden by the single-file build. Lets the offline artifact drop the
+    // "download offline version" link, which would otherwise be a dead relative
+    // path in the one build that must have no external dependencies.
+    __SINGLE_FILE__: 'false',
   },
   build: {
     target: 'es2020',

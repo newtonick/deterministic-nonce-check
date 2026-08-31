@@ -66,7 +66,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run build
+
+      # Builds the hosted site and the offline single file from the same
+      # commit, and stages the latter inside dist/ for the footer download, so
+      # what a visitor downloads is the code the page they downloaded it from
+      # is running.
+      - run: npm run build:all
 
       # The build is reproducible, so publishing the hashes lets anyone rebuild
       # from source and confirm the served bytes match.

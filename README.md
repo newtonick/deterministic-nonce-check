@@ -360,6 +360,44 @@ Each run records the SHA-256 of every built file in the job summary. The build
 is reproducible, so anyone can clone at the same commit, run
 `npm ci && npm run build`, and confirm the served bytes match the source.
 
+### Single file, run locally
+
+```
+npm run build:single      # -> dist-single/deterministic-nonce-check.html
+npm run build:all         # both, with the offline file staged inside dist/
+```
+
+The hosted site offers it from the footer sentence. `build:all` produces both from the
+same commit and copies the offline file into `dist/` alongside a `.sha256`
+sidecar, so what a visitor downloads is the same code as the page they
+downloaded it from, and they can verify it:
+
+```
+shasum -a 256 -c deterministic-nonce-check.html.sha256
+```
+
+The link is compiled out of the offline build itself — it is a relative path,
+which would point at nothing in a `file://` page.
+
+One self-contained HTML file, ~745 kB, with the JavaScript and CSS inlined and
+no external references at all. Open it directly in a browser — no server, no
+network, nothing fetched. That suits the airgapped case: keep a copy on the
+machine sitting next to the signing device.
+
+Two details make `file://` work, and are why this needs its own build rather
+than a concatenation of the normal one:
+
+- The bundle is emitted as an **IIFE, not an ES module**. A
+  `<script type="module">` is fetched under CORS rules a `file://` page cannot
+  satisfy, so the module build never starts.
+- **Everything is inlined.** A relative `<script src>` would itself be a
+  cross-origin fetch from a `file://` page.
+
+The camera needs a secure context. Chrome treats `file://` as one, so the
+scanning step should work when the file is opened directly — worth confirming on
+your own machine, since it is the one part that cannot be checked from a served
+copy.
+
 ### nginx
 
 Build and copy the output:
