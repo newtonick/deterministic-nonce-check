@@ -7,6 +7,8 @@ tell users their hardware is broken when it is not.
 """
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from sign_with_embit import load_cases, secp256k1_backend, sign_case
@@ -23,12 +25,26 @@ def case_id(case: dict) -> str:
 
 
 def test_backend_is_reported(capsys):
-    """Surface which secp256k1 embit used; the fallback is not what devices run."""
+    """Surface which secp256k1 embit used; the fallback is not what devices run.
+
+    embit falls back to a pure-Python implementation when the native library is
+    missing. That fallback is not what ships on SeedSigner, so a run against it
+    proves something subtly different. Set REQUIRE_NATIVE_SECP256K1=1 (as CI
+    does) to make that a hard failure rather than a note.
+    """
     backend = secp256k1_backend()
+    native = backend.endswith("ctypes_secp256k1")
     with capsys.disabled():
         print(f"\nembit secp256k1 backend: {backend}")
+        print(f"  native libsecp256k1: {'yes' if native else 'NO - pure-Python fallback'}")
         print(f"cases: {len(CASES)} (generator seed: {DATA['seed']})")
-    assert backend.endswith(("ctypes_secp256k1", "secp256k1"))
+
+    if os.environ.get("REQUIRE_NATIVE_SECP256K1") == "1":
+        assert native, (
+            f"expected embit to use native libsecp256k1, got {backend}. "
+            "The pure-Python fallback is not what runs on a signing device, so "
+            "agreement with it proves less than it appears to."
+        )
 
 
 def test_case_count():

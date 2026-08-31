@@ -1,0 +1,102 @@
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # ci, not install: fails loudly if the lockfile has drifted rather than
+      # quietly resolving something else.
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # embit binds to libsecp256k1 through ctypes and silently falls back to a
+      # pure-Python implementation when it is missing. That fallback is not what
+      # runs on a signing device, so the native library is installed here and
+      # REQUIRE_NATIVE_SECP256K1 makes its absence a hard failure. Without this
+      # the harness would still pass while proving less than it appears to.
+      - name: Install libsecp256k1
+        run: sudo apt-get update && sudo apt-get install -y libsecp256k1-dev
+
+      - name: Install embit
+        run: pip install -r embit-test-harness/requirements.txt
+
+      - name: Generate test cases
+        run: npx tsx embit-test-harness/generate_cases.mts --count 100 --seed "ci-${{ github.sha }}"
+
+      - name: Verify signatures match embit byte-for-byte
+        env:
+          REQUIRE_NATIVE_SECP256K1: '1'
+        run: pytest embit-test-harness -q
+
+  build:
+    name: Build
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      # The build is reproducible, so publishing the hashes lets anyone rebuild
+      # from source and confirm the served bytes match.
+      - name: Record build hashes
+        run: |
+          find dist -type f -exec sha256sum {} \; | sort -k2 | tee dist-hashes.txt
+          echo "### Build hashes" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat dist-hashes.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    # Scoped to this job so pull-request test runs are not serialised behind
+    # deployments.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

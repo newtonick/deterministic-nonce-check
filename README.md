@@ -3,6 +3,8 @@
 A static site that verifies an airgapped QR Bitcoin signing device derives its
 ECDSA nonces deterministically.
 
+**Live at <https://newtonick.github.io/deterministic-nonce-check/>**
+
 ## Why this exists
 
 Every ECDSA signature needs a secret random value, the nonce `k`. It has an
@@ -333,7 +335,22 @@ rebuild or configuration.
 origin (or `localhost`), so the site must be served over TLS to reach the
 signature-scanning step. Any static host with a certificate works.
 
-#### nginx
+##### GitHub Pages
+
+`.github/workflows/deploy.yml` builds and publishes to Pages on every push to
+`main`. Deployment is gated behind the full test suite, including the embit
+harness, so a build that disagrees with embit is never published.
+
+CI installs `libsecp256k1-dev` and sets `REQUIRE_NATIVE_SECP256K1=1`. embit
+silently falls back to a pure-Python implementation when the native library is
+missing, and that fallback is not what runs on a signing device — without this
+the harness would pass while proving less than it appears to.
+
+Each run records the SHA-256 of every built file in the job summary. The build
+is reproducible, so anyone can clone at the same commit, run
+`npm ci && npm run build`, and confirm the served bytes match the source.
+
+### nginx
 
 Build and copy the output:
 
