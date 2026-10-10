@@ -236,6 +236,11 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .qr-caption p { margin: 0; font-size: 0.85rem; color: var(--text-dim); }
 .qr-caption p + p { margin-top: 0.15rem; }
 
+/* The text alternative to a QR, centred beneath it. */
+.qr-actions { text-align: center; margin: -0.25rem 0 0.9rem; }
+.qr-actions .descriptor-text { text-align: left; margin-top: 0.4rem; }
+button.link.is-copied { color: var(--ok); }
+
 /* Two toggles on one row; the open panel sits beneath them, full width. */
 /* Words on the left, descriptor pushed to the right edge. */
 .disclosure-row {

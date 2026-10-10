@@ -310,9 +310,11 @@ function renderPsbtCard(t: GeneratedTest) {
 
   const encoder = createPsbtUrEncoder(t.psbtBase64);
 
-  // No caption under the QR. A frame counter would be misleading anyway: past
-  // the pure fragments bc-ur emits fountain-coded mixes rather than repeats, so
-  // there is no fixed sequence to count through.
+  // No frame counter under the QR. It would be misleading: past the pure
+  // fragments bc-ur emits fountain-coded mixes rather than repeats, so there is
+  // no fixed sequence to count through.
+  step.body.append(copyablePsbt(t.psbtBase64));
+
   const showNextFrame = async () => {
     await drawQr(frame, encoder.next(), { scale: 6 });
   };
@@ -430,6 +432,40 @@ async function copyText(text: string): Promise<boolean> {
 }
 
 /**
+ * Make a button copy `text` when clicked, confirming in its own label.
+ *
+ * Copying can be refused — an unfocused document, or a browser that withholds
+ * the clipboard. `showInFull` then has to put the whole text on screen and
+ * return the element holding it, which is selected, so that "press copy" is
+ * actually true rather than advice that does nothing.
+ */
+function copyOnClick(button: HTMLButtonElement, text: string, showInFull: () => HTMLElement) {
+  const label = button.textContent;
+  let reset: number | undefined;
+  button.addEventListener('click', () => {
+    void copyText(text).then((copied) => {
+      window.clearTimeout(reset);
+
+      if (copied) {
+        button.textContent = 'Copied';
+        button.classList.add('is-copied');
+        reset = window.setTimeout(() => {
+          button.textContent = label;
+          button.classList.remove('is-copied');
+        }, 1400);
+        return;
+      }
+
+      const range = document.createRange();
+      range.selectNodeContents(showInFull());
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    });
+  });
+}
+
+/**
  * A signature shown truncated, copying in full when clicked.
  *
  * Truncation keeps the tables readable on a phone, but the full ~140-character
@@ -442,35 +478,31 @@ function copyableSignature(hex: string): HTMLElement {
     { class: 'copy-sig', type: 'button', title: 'Click to copy the full signature' },
     short,
   );
-  let reset: number | undefined;
-  button.addEventListener('click', () => {
-    void copyText(hex).then((copied) => {
-      window.clearTimeout(reset);
-
-      if (copied) {
-        button.textContent = 'Copied';
-        button.classList.add('is-copied');
-        reset = window.setTimeout(() => {
-          button.textContent = short;
-          button.classList.remove('is-copied');
-        }, 1400);
-        return;
-      }
-
-      // Copying can be refused — an unfocused document, or a browser that
-      // withholds the clipboard. Show the signature in full and select it, so
-      // that "press copy" is actually true rather than advice that does
-      // nothing.
-      button.textContent = hex;
-      button.classList.add('is-expanded');
-      const range = document.createRange();
-      range.selectNodeContents(button);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-    });
+  copyOnClick(button, hex, () => {
+    button.textContent = hex;
+    button.classList.add('is-expanded');
+    return button;
   });
   return button;
+}
+
+/**
+ * The unsigned PSBT as text, for anything that takes it by paste rather than by
+ * camera — a desktop wallet, an emulator, or a bug report about a run.
+ *
+ * A quiet link rather than a full-width button: scanning is still the main
+ * path, and the button below it is the one that moves the flow on.
+ */
+function copyablePsbt(psbtBase64: string): HTMLElement {
+  const button = el('button', { class: 'link', type: 'button' }, 'Copy PSBT as base64');
+  const wrapper = el('div', { class: 'qr-actions' }, button);
+  let full: HTMLElement | undefined;
+  copyOnClick(button, psbtBase64, () => {
+    full ??= el('code', { class: 'descriptor-text' }, psbtBase64);
+    wrapper.append(full);
+    return full;
+  });
+  return wrapper;
 }
 
 /**

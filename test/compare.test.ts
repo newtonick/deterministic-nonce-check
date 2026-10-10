@@ -106,6 +106,95 @@ describe('compareSignatures', () => {
   });
 });
 
+/**
+ * What SeedSigner-style firmware hands back: the transaction and the partial
+ * signatures, with the UTXOs, scripts and derivations all dropped to keep the
+ * animated QR short.
+ */
+function trimToSignatures(psbtBase64: string): string {
+  const full = bitcoin.Psbt.fromBase64(psbtBase64, { network: NETWORK });
+  const trimmed = new bitcoin.Psbt({ network: NETWORK });
+  trimmed.setVersion(full.version);
+  trimmed.setLocktime(full.locktime);
+  full.txInputs.forEach((i) =>
+    trimmed.addInput({ hash: i.hash, index: i.index, sequence: i.sequence }),
+  );
+  full.txOutputs.forEach((o) => trimmed.addOutput({ script: o.script, value: o.value }));
+  full.data.inputs.forEach((input, index) => {
+    // Assigned directly: bitcoinjs refuses to store a malformed signature, and
+    // a device is under no such obligation.
+    trimmed.data.inputs[index].partialSig = input.partialSig;
+  });
+  return trimmed.toBase64();
+}
+
+describe('a PSBT trimmed to its signatures, as SeedSigner returns it', () => {
+  it('passes when the device signs exactly as embit does', () => {
+    const test = makeTest('trimmed-honest');
+    const signed = signPsbtLocally(test.psbtBase64, test.wallet);
+    const result = compareSignatures(test.psbtBase64, test.wallet, trimToSignatures(signed.psbtBase64));
+    expect(result.verdict).toBe('pass');
+  });
+
+  // The regression: a trimmed PSBT carries no UTXO or witness script, so
+  // verifying against it threw, and a valid random-nonce signature was reported
+  // as "invalid — probably the wrong seed". Seen with a Satochip.
+  it.each(['p2wpkh', 'p2wsh-2of3'] as const)(
+    'still flags a random nonce as non-deterministic (%s)',
+    (walletType) => {
+      const test = makeTest(`trimmed-random-${walletType}`, { walletType });
+      const result = compareSignatures(
+        test.psbtBase64,
+        test.wallet,
+        trimToSignatures(signWithRandomNonce(test)),
+      );
+
+      expect(result.verdict).toBe('nondeterministic');
+      expect(result.inputs.every((i) => i.outcome === 'valid-but-different')).toBe(true);
+      expect(result.inputs.every((i) => i.verifyError === undefined)).toBe(true);
+    },
+  );
+
+  it('still reports a signature that does not verify as inconclusive', () => {
+    const test = makeTest('trimmed-wrong-key');
+    const other = generateWallet(seededRng('other'), { walletType: 'p2wpkh', wordCount: 12 });
+
+    const psbt = bitcoin.Psbt.fromBase64(test.psbtBase64, { network: NETWORK });
+    test.inputs.forEach((input, index) => {
+      const ours = deriveKey(test.wallet, input.change, input.index);
+      const theirs = deriveKey(other, input.change, input.index);
+      // A real signature over this very transaction, but by somebody else's key.
+      psbt.signInput(index, {
+        publicKey: ours.pubkey,
+        sign: (h: Buffer) =>
+          Buffer.from(
+            secp256k1.sign(new Uint8Array(h), theirs.privkey, { lowS: true }).toCompactRawBytes(),
+          ),
+      });
+    });
+
+    const result = compareSignatures(test.psbtBase64, test.wallet, trimToSignatures(psbt.toBase64()));
+    expect(result.verdict).toBe('inconclusive');
+    expect(result.inputs.every((i) => i.outcome === 'invalid')).toBe(true);
+    // It was checked and failed, which is different from not being checkable.
+    expect(result.inputs.every((i) => i.verifyError === undefined)).toBe(true);
+  });
+
+  it('says why when a signature cannot be checked at all', () => {
+    const test = makeTest('trimmed-garbage', { inputCount: 1 });
+    const key = deriveKey(test.wallet, test.inputs[0].change, test.inputs[0].index);
+
+    const psbt = bitcoin.Psbt.fromBase64(test.psbtBase64, { network: NETWORK });
+    psbt.data.inputs[0].partialSig = [{ pubkey: key.pubkey, signature: Buffer.alloc(71, 0x42) }];
+
+    const result = compareSignatures(test.psbtBase64, test.wallet, trimToSignatures(psbt.toBase64()));
+    expect(result.verdict).toBe('inconclusive');
+    expect(result.inputs[0].outcome).toBe('invalid');
+    expect(result.inputs[0].verifyError).toBeTruthy();
+    expect(result.summary).toContain(result.inputs[0].verifyError);
+  });
+});
+
 describe('generated transactions', () => {
   it('never gives a multisig wallet a change output', () => {
     for (let i = 0; i < 40; i++) {

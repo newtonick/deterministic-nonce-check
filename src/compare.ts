@@ -42,6 +42,8 @@ export interface InputComparison {
   actualDerLength?: number;
   /** Whether the device's signature is low-R, as embit's grinding guarantees. */
   actualLowR?: boolean;
+  /** Why an `invalid` signature could not be checked at all, if that is why. */
+  verifyError?: string;
 }
 
 export type Verdict =
@@ -82,6 +84,44 @@ function verifySignature(pubkey: Uint8Array, msgHash: Uint8Array, signature: Uin
     return ecc.verify(msgHash, pubkey, signature);
   } catch {
     return false;
+  }
+}
+
+interface SignatureCheck {
+  verifies: boolean;
+  /** Set when the check could not be run at all, as opposed to run and failed. */
+  error?: string;
+}
+
+/**
+ * Check one of the device's signatures against the transaction we generated.
+ *
+ * The sighash comes from our own unsigned PSBT, never from the one the device
+ * returned. SeedSigner-style firmware trims its reply down to the transaction
+ * and the partial signatures, and bitcoinjs cannot rebuild a sighash without
+ * the UTXO and witness script. Asking the device's PSBT therefore made every
+ * valid signature from such a device look invalid, and a random nonce was
+ * reported as a setup problem — the one mistake this module exists to avoid.
+ *
+ * A check that cannot be run at all (a signature that is not even well-formed
+ * DER, say) is kept apart from one that ran and failed, so the cause is
+ * reported instead of being swallowed.
+ */
+function verifyDeviceSignature(
+  unsignedPsbtBase64: string,
+  inputIndex: number,
+  pubkey: Buffer,
+  signature: Buffer,
+): SignatureCheck {
+  try {
+    const psbt = bitcoin.Psbt.fromBase64(unsignedPsbtBase64, { network: NETWORK });
+    // Assigned directly rather than through updateInput, whose format check
+    // would reject a malformed signature with a far less readable error than
+    // the one validation gives.
+    psbt.data.inputs[inputIndex].partialSig = [{ pubkey, signature }];
+    return { verifies: psbt.validateSignaturesOfInput(inputIndex, verifySignature, pubkey) };
+  } catch (error) {
+    return { verifies: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -135,26 +175,19 @@ export function compareSignatures(
     }
 
     // Differs. Does it at least verify? That distinguishes a bad nonce from a
-    // bad setup, and only bitcoinjs knows the sighash, so ask it.
-    let verifies = false;
-    if (!transactionMismatch) {
-      try {
-        verifies = device.validateSignaturesOfInput(
-          expected.inputIndex,
-          verifySignature,
-          expected.pubkey,
-        );
-      } catch {
-        verifies = false;
-      }
-    }
+    // bad setup, and only bitcoinjs knows the sighash, so ask it. A signature
+    // over some other transaction cannot verify here, so it is not tried.
+    const check: SignatureCheck = transactionMismatch
+      ? { verifies: false }
+      : verifyDeviceSignature(unsignedPsbtBase64, expected.inputIndex, expected.pubkey, actualBuf);
 
     inputs.push({
       ...base,
-      outcome: verifies ? 'valid-but-different' : 'invalid',
+      outcome: check.verifies ? 'valid-but-different' : 'invalid',
       actual: actualHex,
       actualDerLength,
       actualLowR,
+      ...(check.error ? { verifyError: check.error } : {}),
     });
   }
 
@@ -181,9 +214,12 @@ export function compareSignatures(
       'deterministic result. This device is not using RFC6979 nonces as embit does.';
   } else if (counts.invalid > 0 || counts.missing > 0) {
     verdict = 'inconclusive';
+    const uncheckable = inputs.find((i) => i.verifyError);
     summary =
       `${counts.invalid} invalid and ${counts.missing} missing signatures. ` +
-      'This usually means a different seed was loaded, or the scan was incomplete.';
+      (uncheckable
+        ? `The signature for input ${uncheckable.inputIndex} could not be checked: ${uncheckable.verifyError}.`
+        : 'This usually means a different seed was loaded, or the scan was incomplete.');
   } else {
     verdict = 'pass';
     summary =
